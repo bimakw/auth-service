@@ -3,10 +3,10 @@ use serde::Serialize;
 
 use crate::errors::AppError;
 use crate::models::{
-    AuthResponse, ChangePasswordRequest, LoginRequest, RefreshRequest, RegisterRequest,
-    TokenResponse, UserResponse,
+    AuthResponse, ChangePasswordRequest, ForgotPasswordRequest, LoginRequest, RefreshRequest,
+    RegisterRequest, ResetPasswordRequest, TokenResponse, UserResponse,
 };
-use crate::services::{AuthService, TokenService};
+use crate::services::{AuthService, ResetService, TokenService};
 use crate::utils::validate_request;
 
 #[derive(Serialize)]
@@ -149,6 +149,58 @@ pub async fn change_password(
     }))
 }
 
+#[post("/forgot-password")]
+pub async fn forgot_password(
+    auth_service: web::Data<AuthService>,
+    reset_service: web::Data<ResetService>,
+    body: web::Json<ForgotPasswordRequest>,
+) -> Result<HttpResponse, AppError> {
+    // Validate request
+    validate_request(&body.0)?;
+
+    // Check if user exists
+    let user = auth_service.get_user_by_email(&body.email).await?;
+
+    if user.is_some() {
+        // Generate reset token
+        let token = reset_service.create_reset_token(&body.email).await?;
+
+        // In production, send email with reset link
+        // For now, log the token (remove in production!)
+        tracing::info!("Password reset token for {}: {}", body.email, token);
+    }
+
+    // Always return success to prevent email enumeration
+    Ok(HttpResponse::Ok().json(MessageResponse {
+        status: "success".to_string(),
+        message: "If an account with that email exists, a password reset link has been sent".to_string(),
+    }))
+}
+
+#[post("/reset-password")]
+pub async fn reset_password(
+    auth_service: web::Data<AuthService>,
+    reset_service: web::Data<ResetService>,
+    body: web::Json<ResetPasswordRequest>,
+) -> Result<HttpResponse, AppError> {
+    // Validate request
+    validate_request(&body.0)?;
+
+    // Validate token and get email
+    let email = reset_service.validate_reset_token(&body.token).await?;
+
+    // Reset the password
+    auth_service.reset_password(&email, &body.new_password).await?;
+
+    // Invalidate the token
+    reset_service.invalidate_reset_token(&body.token).await?;
+
+    Ok(HttpResponse::Ok().json(MessageResponse {
+        status: "success".to_string(),
+        message: "Password has been reset successfully".to_string(),
+    }))
+}
+
 fn extract_token(req: &HttpRequest) -> Result<String, AppError> {
     let auth_header = req
         .headers()
@@ -174,6 +226,8 @@ pub fn auth_routes(cfg: &mut web::ServiceConfig) {
             .service(refresh_token)
             .service(get_me)
             .service(logout)
-            .service(change_password),
+            .service(change_password)
+            .service(forgot_password)
+            .service(reset_password),
     );
 }
