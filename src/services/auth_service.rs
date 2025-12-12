@@ -186,4 +186,32 @@ impl AuthService {
         tracing::info!("Password changed for user: {}", user.email);
         Ok(())
     }
+
+    pub async fn reset_password(&self, email: &str, new_password: &str) -> Result<(), AppError> {
+        // Find user by email
+        let user = self.get_user_by_email(email).await?
+            .ok_or_else(|| AppError::NotFound("User not found".to_string()))?;
+
+        // Check if user has password-based auth
+        if user.password_hash.is_none() && user.google_id.is_some() {
+            return Err(AppError::BadRequest(
+                "This account uses Google login. Password reset not available.".to_string()
+            ));
+        }
+
+        // Hash new password
+        let new_hash = hash_password(new_password)?;
+
+        // Update password
+        sqlx::query(
+            "UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2"
+        )
+        .bind(&new_hash)
+        .bind(user.id)
+        .execute(&self.pool)
+        .await?;
+
+        tracing::info!("Password reset for user: {}", email);
+        Ok(())
+    }
 }
