@@ -113,6 +113,43 @@ impl TokenService {
         Uuid::parse_str(&claims.sub)
             .map_err(|_| AppError::InternalServerError("Invalid user ID in token".to_string()))
     }
+
+    /// Generate temporary token for 2FA login flow (5 minutes expiration)
+    pub fn generate_temp_token(
+        &self,
+        user_id: Uuid,
+        email: &str,
+        role: &str,
+    ) -> Result<String, AppError> {
+        let now = Utc::now();
+        let exp = now + Duration::seconds(300); // 5 minutes
+
+        let claims = Claims {
+            sub: user_id.to_string(),
+            email: email.to_string(),
+            role: role.to_string(),
+            exp: exp.timestamp(),
+            iat: now.timestamp(),
+            token_type: "temp_2fa".to_string(),
+        };
+
+        encode(
+            &Header::default(),
+            &claims,
+            &EncodingKey::from_secret(self.config.jwt_secret.as_bytes()),
+        )
+        .map_err(|e| AppError::InternalServerError(format!("Failed to generate token: {}", e)))
+    }
+
+    pub fn verify_temp_token(&self, token: &str) -> Result<Claims, AppError> {
+        let token_data = self.verify_token(token)?;
+
+        if token_data.claims.token_type != "temp_2fa" {
+            return Err(AppError::Unauthorized("Invalid token type".to_string()));
+        }
+
+        Ok(token_data.claims)
+    }
 }
 
 #[cfg(test)]
@@ -133,6 +170,7 @@ mod tests {
             google_client_secret: "".to_string(),
             google_redirect_url: "".to_string(),
             frontend_url: "http://localhost:3000".to_string(),
+            totp_issuer: "AuthService".to_string(),
         }
     }
 

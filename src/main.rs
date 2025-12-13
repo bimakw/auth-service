@@ -4,8 +4,8 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use auth_service::config::Config;
 use auth_service::db;
-use auth_service::handlers::{auth_routes, health_check, oauth_routes};
-use auth_service::services::{AuthService, ResetService, TokenService};
+use auth_service::handlers::{auth_routes, health_check, oauth_routes, totp_routes};
+use auth_service::services::{AuthService, ResetService, TokenService, TOTPService};
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
@@ -42,6 +42,7 @@ async fn main() -> std::io::Result<()> {
     let reset_service = web::Data::new(
         ResetService::new(&config.redis_url).expect("Failed to create reset service")
     );
+    let totp_service = web::Data::new(TOTPService::new(pool.clone(), config.clone()));
     let config_data = web::Data::new(config.clone());
 
     // Start HTTP server
@@ -59,10 +60,12 @@ async fn main() -> std::io::Result<()> {
             .app_data(auth_service.clone())
             .app_data(token_service.clone())
             .app_data(reset_service.clone())
+            .app_data(totp_service.clone())
             .app_data(config_data.clone())
             .service(health_check)
             .configure(auth_routes)
             .configure(oauth_routes)
+            .configure(totp_routes)
     })
     .bind(&server_addr)?
     .run()

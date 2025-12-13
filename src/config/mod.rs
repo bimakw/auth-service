@@ -13,6 +13,7 @@ pub struct Config {
     pub google_client_secret: String,
     pub google_redirect_url: String,
     pub frontend_url: String,
+    pub totp_issuer: String,
 }
 
 impl Config {
@@ -40,6 +41,8 @@ impl Config {
                 .unwrap_or_else(|_| "http://localhost:8080/api/oauth/google/callback".to_string()),
             frontend_url: env::var("FRONTEND_URL")
                 .unwrap_or_else(|_| "http://localhost:3000".to_string()),
+            totp_issuer: env::var("TOTP_ISSUER")
+                .unwrap_or_else(|_| "AuthService".to_string()),
         })
     }
 

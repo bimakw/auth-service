@@ -32,6 +32,9 @@ jsonwebtoken = "9"
 argon2 = "0.5"
 oauth2 = "4"
 
+# TOTP/2FA
+totp-rs = { version = "5", features = ["qr", "gen_secret"] }
+
 # Validation
 validator = { version = "0.16", features = ["derive"] }
 

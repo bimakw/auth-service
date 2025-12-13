@@ -6,6 +6,7 @@ A robust authentication service built with Rust and Actix-web, featuring JWT aut
 
 - User registration and login with email/password
 - JWT-based authentication (access & refresh tokens)
+- **Two-Factor Authentication (TOTP)** with backup codes
 - Google OAuth2 integration
 - Password hashing with Argon2
 - Role-based access control
@@ -17,7 +18,7 @@ A robust authentication service built with Rust and Actix-web, featuring JWT aut
 - **Framework:** Actix-web
 - **Database:** PostgreSQL
 - **Cache:** Redis
-- **Authentication:** JWT, OAuth2
+- **Authentication:** JWT, OAuth2, TOTP
 - **Password Hashing:** Argon2
 
 ## API Endpoints
@@ -30,9 +31,22 @@ A robust authentication service built with Rust and Actix-web, featuring JWT aut
 | POST | `/api/auth/logout` | Logout user | Yes |
 | GET | `/api/auth/me` | Get current user profile | Yes |
 | PUT | `/api/auth/change-password` | Change password | Yes |
+| POST | `/api/auth/forgot-password` | Request password reset | No |
+| POST | `/api/auth/reset-password` | Reset password with token | No |
 | GET | `/api/oauth/google` | Redirect to Google OAuth | No |
 | GET | `/api/oauth/google/callback` | Google OAuth callback | No |
 | GET | `/health` | Health check | No |
+
+### Two-Factor Authentication (2FA/TOTP)
+
+| Method | Endpoint | Description | Auth |
+|--------|----------|-------------|------|
+| POST | `/api/auth/totp/setup` | Start 2FA setup, get QR code | Yes |
+| POST | `/api/auth/totp/verify-setup` | Confirm 2FA setup with code | Yes |
+| POST | `/api/auth/totp/verify` | Verify TOTP code during login | Temp Token |
+| GET | `/api/auth/totp/status` | Check 2FA status | Yes |
+| POST | `/api/auth/totp/disable` | Disable 2FA | Yes |
+| POST | `/api/auth/totp/backup-codes` | Regenerate backup codes | Yes |
 
 ## Getting Started
 
@@ -96,6 +110,7 @@ docker-compose down
 | `GOOGLE_CLIENT_SECRET` | Google OAuth client secret | - |
 | `GOOGLE_REDIRECT_URL` | Google OAuth redirect URL | - |
 | `FRONTEND_URL` | Frontend URL for CORS | `http://localhost:3000` |
+| `TOTP_ISSUER` | Issuer name for TOTP (shown in authenticator apps) | `AuthService` |
 
 ## API Usage Examples
 
@@ -139,6 +154,45 @@ curl -X POST http://localhost:8080/api/auth/refresh \
   }'
 ```
 
+### Two-Factor Authentication
+
+#### Enable 2FA
+
+```bash
+# Step 1: Start 2FA setup (get QR code)
+curl -X POST http://localhost:8080/api/auth/totp/setup \
+  -H "Authorization: Bearer <access_token>"
+
+# Step 2: Verify setup with code from authenticator app
+curl -X POST http://localhost:8080/api/auth/totp/verify-setup \
+  -H "Authorization: Bearer <access_token>" \
+  -H "Content-Type: application/json" \
+  -d '{"code": "123456"}'
+```
+
+#### Login with 2FA
+
+```bash
+# Step 1: Login (returns temp_token if 2FA enabled)
+curl -X POST http://localhost:8080/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email": "user@example.com", "password": "password123"}'
+
+# Response: {"status": "2fa_required", "temp_token": "...", ...}
+
+# Step 2: Verify TOTP code
+curl -X POST http://localhost:8080/api/auth/totp/verify \
+  -H "Content-Type: application/json" \
+  -d '{"temp_token": "<temp_token>", "code": "123456"}'
+```
+
+#### Check 2FA Status
+
+```bash
+curl -X GET http://localhost:8080/api/auth/totp/status \
+  -H "Authorization: Bearer <access_token>"
+```
+
 ## Project Structure
 
 ```
@@ -149,7 +203,8 @@ auth-service/
 ├── docker-compose.yml
 ├── Makefile
 ├── migrations/
-│   └── 001_create_users_table.sql
+│   ├── 001_create_users_table.sql
+│   └── 002_add_totp.sql
 └── src/
     ├── main.rs
     ├── lib.rs

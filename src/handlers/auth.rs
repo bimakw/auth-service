@@ -4,7 +4,7 @@ use serde::Serialize;
 use crate::errors::AppError;
 use crate::models::{
     AuthResponse, ChangePasswordRequest, ForgotPasswordRequest, LoginRequest, RefreshRequest,
-    RegisterRequest, ResetPasswordRequest, TokenResponse, UserResponse,
+    RegisterRequest, ResetPasswordRequest, TokenResponse, TwoFactorRequiredResponse, UserResponse,
 };
 use crate::services::{AuthService, ResetService, TokenService};
 use crate::utils::validate_request;
@@ -51,7 +51,20 @@ pub async fn login(
     // Login user
     let user = auth_service.login(body.into_inner()).await?;
 
-    // Generate tokens
+    // Check if 2FA is enabled
+    if user.totp_enabled {
+        // Generate temporary token for 2FA verification
+        let temp_token = token_service.generate_temp_token(user.id, &user.email, &user.role)?;
+
+        return Ok(HttpResponse::Ok().json(TwoFactorRequiredResponse {
+            status: "2fa_required".to_string(),
+            requires_2fa: true,
+            temp_token,
+            message: "Please verify with your authenticator app".to_string(),
+        }));
+    }
+
+    // Generate tokens (no 2FA)
     let access_token = token_service.generate_access_token(user.id, &user.email, &user.role)?;
     let refresh_tok = token_service.generate_refresh_token(user.id, &user.email, &user.role)?;
 

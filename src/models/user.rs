@@ -14,6 +14,9 @@ pub struct User {
     pub role: String,
     pub google_id: Option<String>,
     pub email_verified: bool,
+    #[serde(skip_serializing)]
+    pub totp_secret: Option<String>,
+    pub totp_enabled: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -25,6 +28,7 @@ pub struct UserResponse {
     pub name: String,
     pub role: String,
     pub email_verified: bool,
+    pub totp_enabled: bool,
     pub created_at: DateTime<Utc>,
 }
 
@@ -36,6 +40,7 @@ impl From<User> for UserResponse {
             name: user.name,
             role: user.role,
             email_verified: user.email_verified,
+            totp_enabled: user.totp_enabled,
             created_at: user.created_at,
         }
     }
@@ -65,6 +70,14 @@ pub struct AuthResponse {
     pub access_token: String,
     pub refresh_token: String,
     pub user: UserResponse,
+}
+
+#[derive(Debug, Serialize)]
+pub struct TwoFactorRequiredResponse {
+    pub status: String,
+    pub requires_2fa: bool,
+    pub temp_token: String,
+    pub message: String,
 }
 
 #[derive(Debug, Deserialize)]
