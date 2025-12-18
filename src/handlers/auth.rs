@@ -6,8 +6,46 @@ use crate::models::{
     AuthResponse, ChangePasswordRequest, ForgotPasswordRequest, LoginRequest, RefreshRequest,
     RegisterRequest, ResetPasswordRequest, TokenResponse, TwoFactorRequiredResponse, UserResponse,
 };
-use crate::services::{AuthService, ResetService, TokenService};
+use crate::services::{AuthService, RateLimiters, ResetService, TokenService};
 use crate::utils::validate_request;
+
+fn get_client_ip(req: &HttpRequest) -> String {
+    req.connection_info()
+        .realip_remote_addr()
+        .unwrap_or("unknown")
+        .to_string()
+}
+
+async fn check_rate_limit(
+    rate_limiters: &RateLimiters,
+    key: &str,
+    limit_type: &str,
+) -> Result<(), AppError> {
+    let result = match limit_type {
+        "login" => rate_limiters.login.check_rate_limit(key).await?,
+        "registration" => rate_limiters.registration.check_rate_limit(key).await?,
+        "password_reset" => rate_limiters.password_reset.check_rate_limit(key).await?,
+        _ => rate_limiters.general.check_rate_limit(key).await?,
+    };
+
+    if result.is_limited {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let retry_after = result.reset_at.saturating_sub(now);
+
+        return Err(AppError::TooManyRequests {
+            retry_after,
+            message: format!(
+                "Too many {} attempts. Please try again in {} seconds.",
+                limit_type, retry_after
+            ),
+        });
+    }
+
+    Ok(())
+}
 
 #[derive(Serialize)]
 struct MessageResponse {
@@ -17,10 +55,16 @@ struct MessageResponse {
 
 #[post("/register")]
 pub async fn register(
+    req: HttpRequest,
     auth_service: web::Data<AuthService>,
     token_service: web::Data<TokenService>,
+    rate_limiters: web::Data<RateLimiters>,
     body: web::Json<RegisterRequest>,
 ) -> Result<HttpResponse, AppError> {
+    // Check rate limit by IP
+    let client_ip = get_client_ip(&req);
+    check_rate_limit(&rate_limiters, &client_ip, "registration").await?;
+
     // Validate request
     validate_request(&body.0)?;
 
@@ -41,10 +85,17 @@ pub async fn register(
 
 #[post("/login")]
 pub async fn login(
+    req: HttpRequest,
     auth_service: web::Data<AuthService>,
     token_service: web::Data<TokenService>,
+    rate_limiters: web::Data<RateLimiters>,
     body: web::Json<LoginRequest>,
 ) -> Result<HttpResponse, AppError> {
+    // Check rate limit by IP + email combination
+    let client_ip = get_client_ip(&req);
+    let rate_key = format!("{}:{}", client_ip, body.email);
+    check_rate_limit(&rate_limiters, &rate_key, "login").await?;
+
     // Validate request
     validate_request(&body.0)?;
 
@@ -164,10 +215,16 @@ pub async fn change_password(
 
 #[post("/forgot-password")]
 pub async fn forgot_password(
+    req: HttpRequest,
     auth_service: web::Data<AuthService>,
     reset_service: web::Data<ResetService>,
+    rate_limiters: web::Data<RateLimiters>,
     body: web::Json<ForgotPasswordRequest>,
 ) -> Result<HttpResponse, AppError> {
+    // Check rate limit by IP
+    let client_ip = get_client_ip(&req);
+    check_rate_limit(&rate_limiters, &client_ip, "password_reset").await?;
+
     // Validate request
     validate_request(&body.0)?;
 
@@ -192,10 +249,16 @@ pub async fn forgot_password(
 
 #[post("/reset-password")]
 pub async fn reset_password(
+    req: HttpRequest,
     auth_service: web::Data<AuthService>,
     reset_service: web::Data<ResetService>,
+    rate_limiters: web::Data<RateLimiters>,
     body: web::Json<ResetPasswordRequest>,
 ) -> Result<HttpResponse, AppError> {
+    // Check rate limit by IP
+    let client_ip = get_client_ip(&req);
+    check_rate_limit(&rate_limiters, &client_ip, "password_reset").await?;
+
     // Validate request
     validate_request(&body.0)?;
 

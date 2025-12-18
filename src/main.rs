@@ -5,7 +5,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use auth_service::config::Config;
 use auth_service::db;
 use auth_service::handlers::{auth_routes, health_check, oauth_routes, totp_routes};
-use auth_service::services::{AuthService, ResetService, TokenService, TOTPService};
+use auth_service::services::{AuthService, RateLimiters, ResetService, TokenService, TOTPService};
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
@@ -43,6 +43,9 @@ async fn main() -> std::io::Result<()> {
         ResetService::new(&config.redis_url).expect("Failed to create reset service")
     );
     let totp_service = web::Data::new(TOTPService::new(pool.clone(), config.clone()));
+    let rate_limiters = web::Data::new(
+        RateLimiters::new(&config.redis_url).expect("Failed to create rate limiters")
+    );
     let config_data = web::Data::new(config.clone());
 
     // Start HTTP server
@@ -61,6 +64,7 @@ async fn main() -> std::io::Result<()> {
             .app_data(token_service.clone())
             .app_data(reset_service.clone())
             .app_data(totp_service.clone())
+            .app_data(rate_limiters.clone())
             .app_data(config_data.clone())
             .service(health_check)
             .configure(auth_routes)

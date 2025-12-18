@@ -17,6 +17,7 @@ pub enum AppError {
     Conflict(String),
     InternalServerError(String),
     ValidationError(String),
+    TooManyRequests { retry_after: u64, message: String },
 }
 
 impl fmt::Display for AppError {
@@ -29,26 +30,40 @@ impl fmt::Display for AppError {
             AppError::Conflict(msg) => write!(f, "Conflict: {}", msg),
             AppError::InternalServerError(msg) => write!(f, "Internal Server Error: {}", msg),
             AppError::ValidationError(msg) => write!(f, "Validation Error: {}", msg),
+            AppError::TooManyRequests { message, .. } => write!(f, "Too Many Requests: {}", message),
         }
     }
 }
 
 impl ResponseError for AppError {
     fn error_response(&self) -> HttpResponse {
-        let (status_code, message) = match self {
-            AppError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg.clone()),
-            AppError::Unauthorized(msg) => (StatusCode::UNAUTHORIZED, msg.clone()),
-            AppError::Forbidden(msg) => (StatusCode::FORBIDDEN, msg.clone()),
-            AppError::NotFound(msg) => (StatusCode::NOT_FOUND, msg.clone()),
-            AppError::Conflict(msg) => (StatusCode::CONFLICT, msg.clone()),
-            AppError::InternalServerError(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg.clone()),
-            AppError::ValidationError(msg) => (StatusCode::UNPROCESSABLE_ENTITY, msg.clone()),
-        };
+        match self {
+            AppError::TooManyRequests { retry_after, message } => {
+                HttpResponse::build(StatusCode::TOO_MANY_REQUESTS)
+                    .insert_header(("Retry-After", retry_after.to_string()))
+                    .json(ErrorResponse {
+                        status: "error".to_string(),
+                        message: message.clone(),
+                    })
+            }
+            _ => {
+                let (status_code, message) = match self {
+                    AppError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg.clone()),
+                    AppError::Unauthorized(msg) => (StatusCode::UNAUTHORIZED, msg.clone()),
+                    AppError::Forbidden(msg) => (StatusCode::FORBIDDEN, msg.clone()),
+                    AppError::NotFound(msg) => (StatusCode::NOT_FOUND, msg.clone()),
+                    AppError::Conflict(msg) => (StatusCode::CONFLICT, msg.clone()),
+                    AppError::InternalServerError(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg.clone()),
+                    AppError::ValidationError(msg) => (StatusCode::UNPROCESSABLE_ENTITY, msg.clone()),
+                    AppError::TooManyRequests { .. } => unreachable!(),
+                };
 
-        HttpResponse::build(status_code).json(ErrorResponse {
-            status: "error".to_string(),
-            message,
-        })
+                HttpResponse::build(status_code).json(ErrorResponse {
+                    status: "error".to_string(),
+                    message,
+                })
+            }
+        }
     }
 }
 
