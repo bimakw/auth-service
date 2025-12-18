@@ -1,4 +1,4 @@
-use actix_web::{get, web, HttpResponse};
+use actix_web::{get, web, HttpRequest, HttpResponse};
 use oauth2::{
     basic::BasicClient, AuthUrl, AuthorizationCode, ClientId, ClientSecret, CsrfToken,
     RedirectUrl, Scope, TokenResponse, TokenUrl,
@@ -7,7 +7,18 @@ use serde::Deserialize;
 
 use crate::config::Config;
 use crate::errors::AppError;
-use crate::services::{AuthService, TokenService};
+use crate::services::{AuditContext, AuditService, AuthService, TokenService};
+
+fn get_audit_context(req: &HttpRequest) -> AuditContext {
+    AuditContext {
+        ip_address: req.connection_info().realip_remote_addr().map(|s| s.to_string()),
+        user_agent: req
+            .headers()
+            .get("User-Agent")
+            .and_then(|h| h.to_str().ok())
+            .map(|s| s.to_string()),
+    }
+}
 
 #[derive(Debug, Deserialize)]
 pub struct OAuthCallbackQuery {
@@ -95,10 +106,12 @@ pub async fn google_login(config: web::Data<Config>) -> Result<HttpResponse, App
 
 #[get("/google/callback")]
 pub async fn google_callback(
+    req: HttpRequest,
     query: web::Query<OAuthCallbackQuery>,
     config: web::Data<Config>,
     auth_service: web::Data<AuthService>,
     token_service: web::Data<TokenService>,
+    audit_service: web::Data<AuditService>,
 ) -> Result<HttpResponse, AppError> {
     let client = create_google_oauth_client(&config)?;
 
@@ -137,6 +150,10 @@ pub async fn google_callback(
         .get_or_create_google_user(&user_info.id, &user_info.email, &user_info.name)
         .await?;
 
+    // Log OAuth login
+    let audit_context = get_audit_context(&req);
+    let _ = audit_service.log_oauth_login(user.id, "google", &audit_context).await;
+
     // Generate tokens
     let jwt_access_token = token_service.generate_access_token(user.id, &user.email, &user.role)?;
     let jwt_refresh_token =
@@ -171,10 +188,12 @@ pub async fn github_login(config: web::Data<Config>) -> Result<HttpResponse, App
 
 #[get("/github/callback")]
 pub async fn github_callback(
+    req: HttpRequest,
     query: web::Query<OAuthCallbackQuery>,
     config: web::Data<Config>,
     auth_service: web::Data<AuthService>,
     token_service: web::Data<TokenService>,
+    audit_service: web::Data<AuditService>,
 ) -> Result<HttpResponse, AppError> {
     let client = create_github_oauth_client(&config)?;
 
@@ -245,6 +264,10 @@ pub async fn github_callback(
     let user = auth_service
         .get_or_create_github_user(&github_id, &email, &name)
         .await?;
+
+    // Log OAuth login
+    let audit_context = get_audit_context(&req);
+    let _ = audit_service.log_oauth_login(user.id, "github", &audit_context).await;
 
     // Generate tokens
     let jwt_access_token = token_service.generate_access_token(user.id, &user.email, &user.role)?;

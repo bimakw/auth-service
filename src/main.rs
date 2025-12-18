@@ -5,7 +5,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use auth_service::config::Config;
 use auth_service::db;
 use auth_service::handlers::{auth_routes, health_check, oauth_routes, totp_routes};
-use auth_service::services::{AuthService, LockoutService, RateLimiters, ResetService, TokenService, TOTPService};
+use auth_service::services::{AuditService, AuthService, LockoutService, RateLimiters, ResetService, TokenService, TOTPService};
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
@@ -38,6 +38,7 @@ async fn main() -> std::io::Result<()> {
 
     // Create services
     let auth_service = web::Data::new(AuthService::new(pool.clone()));
+    let audit_service = web::Data::new(AuditService::new(pool.clone()));
     let token_service = web::Data::new(TokenService::new(config.clone()));
     let reset_service = web::Data::new(
         ResetService::new(&config.redis_url).expect("Failed to create reset service")
@@ -64,6 +65,7 @@ async fn main() -> std::io::Result<()> {
             .wrap(cors)
             .wrap(tracing_actix_web::TracingLogger::default())
             .app_data(auth_service.clone())
+            .app_data(audit_service.clone())
             .app_data(token_service.clone())
             .app_data(reset_service.clone())
             .app_data(totp_service.clone())
