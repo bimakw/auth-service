@@ -12,6 +12,9 @@ pub struct Config {
     pub google_client_id: String,
     pub google_client_secret: String,
     pub google_redirect_url: String,
+    pub github_client_id: String,
+    pub github_client_secret: String,
+    pub github_redirect_url: String,
     pub frontend_url: String,
     pub totp_issuer: String,
 }
@@ -39,6 +42,10 @@ impl Config {
             google_client_secret: env::var("GOOGLE_CLIENT_SECRET").unwrap_or_default(),
             google_redirect_url: env::var("GOOGLE_REDIRECT_URL")
                 .unwrap_or_else(|_| "http://localhost:8080/api/oauth/google/callback".to_string()),
+            github_client_id: env::var("GITHUB_CLIENT_ID").unwrap_or_default(),
+            github_client_secret: env::var("GITHUB_CLIENT_SECRET").unwrap_or_default(),
+            github_redirect_url: env::var("GITHUB_REDIRECT_URL")
+                .unwrap_or_else(|_| "http://localhost:8080/api/oauth/github/callback".to_string()),
             frontend_url: env::var("FRONTEND_URL")
                 .unwrap_or_else(|_| "http://localhost:3000".to_string()),
             totp_issuer: env::var("TOTP_ISSUER")
