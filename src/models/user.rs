@@ -13,6 +13,7 @@ pub struct User {
     pub name: String,
     pub role: String,
     pub google_id: Option<String>,
+    pub github_id: Option<String>,
     pub email_verified: bool,
     #[serde(skip_serializing)]
     pub totp_secret: Option<String>,

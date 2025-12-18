@@ -193,9 +193,9 @@ impl AuthService {
             .ok_or_else(|| AppError::NotFound("User not found".to_string()))?;
 
         // Check if user has password-based auth
-        if user.password_hash.is_none() && user.google_id.is_some() {
+        if user.password_hash.is_none() && (user.google_id.is_some() || user.github_id.is_some()) {
             return Err(AppError::BadRequest(
-                "This account uses Google login. Password reset not available.".to_string()
+                "This account uses social login. Password reset not available.".to_string()
             ));
         }
 
@@ -213,5 +213,68 @@ impl AuthService {
 
         tracing::info!("Password reset for user: {}", email);
         Ok(())
+    }
+
+    pub async fn get_or_create_github_user(
+        &self,
+        github_id: &str,
+        email: &str,
+        name: &str,
+    ) -> Result<User, AppError> {
+        // Check if user exists with github_id
+        let existing_user = sqlx::query_as::<_, User>(
+            "SELECT * FROM users WHERE github_id = $1"
+        )
+        .bind(github_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        if let Some(user) = existing_user {
+            return Ok(user);
+        }
+
+        // Check if user exists with email (link accounts)
+        let existing_email_user = sqlx::query_as::<_, User>(
+            "SELECT * FROM users WHERE email = $1"
+        )
+        .bind(email)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        if let Some(user) = existing_email_user {
+            // Link GitHub account to existing user
+            let updated_user = sqlx::query_as::<_, User>(
+                r#"
+                UPDATE users
+                SET github_id = $1, email_verified = true, updated_at = NOW()
+                WHERE id = $2
+                RETURNING *
+                "#
+            )
+            .bind(github_id)
+            .bind(user.id)
+            .fetch_one(&self.pool)
+            .await?;
+
+            tracing::info!("Linked GitHub account to existing user: {}", email);
+            return Ok(updated_user);
+        }
+
+        // Create new user with GitHub account
+        let user = sqlx::query_as::<_, User>(
+            r#"
+            INSERT INTO users (email, name, github_id, email_verified, role)
+            VALUES ($1, $2, $3, true, 'user')
+            RETURNING *
+            "#
+        )
+        .bind(email)
+        .bind(name)
+        .bind(github_id)
+        .fetch_one(&self.pool)
+        .await?;
+
+        tracing::info!("Created new user with GitHub account: {}", email);
+        Ok(user)
     }
 }
