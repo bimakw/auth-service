@@ -18,6 +18,7 @@ pub enum AppError {
     InternalServerError(String),
     ValidationError(String),
     TooManyRequests { retry_after: u64, message: String },
+    AccountLocked { locked_until: u64, message: String },
 }
 
 impl fmt::Display for AppError {
@@ -31,6 +32,7 @@ impl fmt::Display for AppError {
             AppError::InternalServerError(msg) => write!(f, "Internal Server Error: {}", msg),
             AppError::ValidationError(msg) => write!(f, "Validation Error: {}", msg),
             AppError::TooManyRequests { message, .. } => write!(f, "Too Many Requests: {}", message),
+            AppError::AccountLocked { message, .. } => write!(f, "Account Locked: {}", message),
         }
     }
 }
@@ -46,6 +48,14 @@ impl ResponseError for AppError {
                         message: message.clone(),
                     })
             }
+            AppError::AccountLocked { locked_until, message } => {
+                HttpResponse::build(StatusCode::FORBIDDEN)
+                    .insert_header(("X-Locked-Until", locked_until.to_string()))
+                    .json(ErrorResponse {
+                        status: "error".to_string(),
+                        message: message.clone(),
+                    })
+            }
             _ => {
                 let (status_code, message) = match self {
                     AppError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg.clone()),
@@ -55,7 +65,7 @@ impl ResponseError for AppError {
                     AppError::Conflict(msg) => (StatusCode::CONFLICT, msg.clone()),
                     AppError::InternalServerError(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg.clone()),
                     AppError::ValidationError(msg) => (StatusCode::UNPROCESSABLE_ENTITY, msg.clone()),
-                    AppError::TooManyRequests { .. } => unreachable!(),
+                    AppError::TooManyRequests { .. } | AppError::AccountLocked { .. } => unreachable!(),
                 };
 
                 HttpResponse::build(status_code).json(ErrorResponse {

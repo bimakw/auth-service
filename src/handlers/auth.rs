@@ -6,7 +6,7 @@ use crate::models::{
     AuthResponse, ChangePasswordRequest, ForgotPasswordRequest, LoginRequest, RefreshRequest,
     RegisterRequest, ResetPasswordRequest, TokenResponse, TwoFactorRequiredResponse, UserResponse,
 };
-use crate::services::{AuthService, RateLimiters, ResetService, TokenService};
+use crate::services::{AuthService, LockoutService, RateLimiters, ResetService, TokenService};
 use crate::utils::validate_request;
 
 fn get_client_ip(req: &HttpRequest) -> String {
@@ -89,6 +89,7 @@ pub async fn login(
     auth_service: web::Data<AuthService>,
     token_service: web::Data<TokenService>,
     rate_limiters: web::Data<RateLimiters>,
+    lockout_service: web::Data<LockoutService>,
     body: web::Json<LoginRequest>,
 ) -> Result<HttpResponse, AppError> {
     // Check rate limit by IP + email combination
@@ -96,35 +97,82 @@ pub async fn login(
     let rate_key = format!("{}:{}", client_ip, body.email);
     check_rate_limit(&rate_limiters, &rate_key, "login").await?;
 
+    // Check if account is locked
+    let lockout_status = lockout_service.check_lockout(&body.email).await?;
+    if lockout_status.is_locked {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let locked_until = lockout_status.locked_until.unwrap_or(now);
+        let seconds_remaining = locked_until.saturating_sub(now);
+
+        return Err(AppError::AccountLocked {
+            locked_until,
+            message: format!(
+                "Account is temporarily locked due to multiple failed login attempts. Please try again in {} minutes.",
+                (seconds_remaining / 60) + 1
+            ),
+        });
+    }
+
     // Validate request
     validate_request(&body.0)?;
 
     // Login user
-    let user = auth_service.login(body.into_inner()).await?;
+    let login_result = auth_service.login(body.0.clone()).await;
 
-    // Check if 2FA is enabled
-    if user.totp_enabled {
-        // Generate temporary token for 2FA verification
-        let temp_token = token_service.generate_temp_token(user.id, &user.email, &user.role)?;
+    match login_result {
+        Ok(user) => {
+            // Clear failed attempts on successful login
+            lockout_service.clear_failed_attempts(&body.email).await?;
 
-        return Ok(HttpResponse::Ok().json(TwoFactorRequiredResponse {
-            status: "2fa_required".to_string(),
-            requires_2fa: true,
-            temp_token,
-            message: "Please verify with your authenticator app".to_string(),
-        }));
+            // Check if 2FA is enabled
+            if user.totp_enabled {
+                // Generate temporary token for 2FA verification
+                let temp_token = token_service.generate_temp_token(user.id, &user.email, &user.role)?;
+
+                return Ok(HttpResponse::Ok().json(TwoFactorRequiredResponse {
+                    status: "2fa_required".to_string(),
+                    requires_2fa: true,
+                    temp_token,
+                    message: "Please verify with your authenticator app".to_string(),
+                }));
+            }
+
+            // Generate tokens (no 2FA)
+            let access_token = token_service.generate_access_token(user.id, &user.email, &user.role)?;
+            let refresh_tok = token_service.generate_refresh_token(user.id, &user.email, &user.role)?;
+
+            Ok(HttpResponse::Ok().json(AuthResponse {
+                status: "success".to_string(),
+                access_token,
+                refresh_token: refresh_tok,
+                user: UserResponse::from(user),
+            }))
+        }
+        Err(e) => {
+            // Record failed attempt for auth errors
+            if matches!(e, AppError::Unauthorized(_)) {
+                let lockout_status = lockout_service.record_failed_attempt(&body.email).await?;
+
+                if lockout_status.is_locked {
+                    let locked_until = lockout_status.locked_until.unwrap_or(0);
+                    return Err(AppError::AccountLocked {
+                        locked_until,
+                        message: "Account has been locked due to multiple failed login attempts. Please try again later.".to_string(),
+                    });
+                }
+
+                // Add remaining attempts to error message
+                return Err(AppError::Unauthorized(format!(
+                    "Invalid email or password. {} attempts remaining.",
+                    lockout_status.remaining_attempts
+                )));
+            }
+            Err(e)
+        }
     }
-
-    // Generate tokens (no 2FA)
-    let access_token = token_service.generate_access_token(user.id, &user.email, &user.role)?;
-    let refresh_tok = token_service.generate_refresh_token(user.id, &user.email, &user.role)?;
-
-    Ok(HttpResponse::Ok().json(AuthResponse {
-        status: "success".to_string(),
-        access_token,
-        refresh_token: refresh_tok,
-        user: UserResponse::from(user),
-    }))
 }
 
 #[post("/refresh")]
