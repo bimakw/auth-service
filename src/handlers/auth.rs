@@ -6,7 +6,7 @@ use crate::models::{
     AuthResponse, ChangePasswordRequest, ForgotPasswordRequest, LoginRequest, RefreshRequest,
     RegisterRequest, ResetPasswordRequest, TokenResponse, TwoFactorRequiredResponse, UserResponse,
 };
-use crate::services::{AuthService, LockoutService, RateLimiters, ResetService, TokenService};
+use crate::services::{AuditContext, AuditService, AuthService, LockoutService, RateLimiters, ResetService, TokenService};
 use crate::utils::validate_request;
 
 fn get_client_ip(req: &HttpRequest) -> String {
@@ -14,6 +14,17 @@ fn get_client_ip(req: &HttpRequest) -> String {
         .realip_remote_addr()
         .unwrap_or("unknown")
         .to_string()
+}
+
+fn get_audit_context(req: &HttpRequest) -> AuditContext {
+    AuditContext {
+        ip_address: Some(get_client_ip(req)),
+        user_agent: req
+            .headers()
+            .get("User-Agent")
+            .and_then(|h| h.to_str().ok())
+            .map(|s| s.to_string()),
+    }
 }
 
 async fn check_rate_limit(
@@ -58,6 +69,7 @@ pub async fn register(
     req: HttpRequest,
     auth_service: web::Data<AuthService>,
     token_service: web::Data<TokenService>,
+    audit_service: web::Data<AuditService>,
     rate_limiters: web::Data<RateLimiters>,
     body: web::Json<RegisterRequest>,
 ) -> Result<HttpResponse, AppError> {
@@ -68,8 +80,14 @@ pub async fn register(
     // Validate request
     validate_request(&body.0)?;
 
+    let audit_context = get_audit_context(&req);
+    let email = body.email.clone();
+
     // Register user
     let user = auth_service.register(body.into_inner()).await?;
+
+    // Log registration
+    let _ = audit_service.log_registration(user.id, &email, &audit_context).await;
 
     // Generate tokens
     let access_token = token_service.generate_access_token(user.id, &user.email, &user.role)?;
@@ -88,6 +106,7 @@ pub async fn login(
     req: HttpRequest,
     auth_service: web::Data<AuthService>,
     token_service: web::Data<TokenService>,
+    audit_service: web::Data<AuditService>,
     rate_limiters: web::Data<RateLimiters>,
     lockout_service: web::Data<LockoutService>,
     body: web::Json<LoginRequest>,
@@ -96,6 +115,8 @@ pub async fn login(
     let client_ip = get_client_ip(&req);
     let rate_key = format!("{}:{}", client_ip, body.email);
     check_rate_limit(&rate_limiters, &rate_key, "login").await?;
+
+    let audit_context = get_audit_context(&req);
 
     // Check if account is locked
     let lockout_status = lockout_service.check_lockout(&body.email).await?;
@@ -127,6 +148,9 @@ pub async fn login(
             // Clear failed attempts on successful login
             lockout_service.clear_failed_attempts(&body.email).await?;
 
+            // Log successful login
+            let _ = audit_service.log_login_success(user.id, &audit_context).await;
+
             // Check if 2FA is enabled
             if user.totp_enabled {
                 // Generate temporary token for 2FA verification
@@ -154,9 +178,15 @@ pub async fn login(
         Err(e) => {
             // Record failed attempt for auth errors
             if matches!(e, AppError::Unauthorized(_)) {
+                // Log failed login
+                let _ = audit_service.log_login_failed(&body.email, &audit_context, "Invalid credentials").await;
+
                 let lockout_status = lockout_service.record_failed_attempt(&body.email).await?;
 
                 if lockout_status.is_locked {
+                    // Log account lockout
+                    let _ = audit_service.log_account_locked(&body.email, &audit_context).await;
+
                     let locked_until = lockout_status.locked_until.unwrap_or(0);
                     return Err(AppError::AccountLocked {
                         locked_until,
@@ -220,9 +250,21 @@ pub async fn get_me(
 }
 
 #[post("/logout")]
-pub async fn logout(req: HttpRequest) -> Result<HttpResponse, AppError> {
+pub async fn logout(
+    req: HttpRequest,
+    token_service: web::Data<TokenService>,
+    audit_service: web::Data<AuditService>,
+) -> Result<HttpResponse, AppError> {
     // Extract token from Authorization header
-    let _token = extract_token(&req)?;
+    let token = extract_token(&req)?;
+
+    // Get user ID for audit logging
+    if let Ok(claims) = token_service.verify_access_token(&token) {
+        if let Ok(user_id) = token_service.extract_user_id(&claims) {
+            let audit_context = get_audit_context(&req);
+            let _ = audit_service.log_logout(user_id, &audit_context).await;
+        }
+    }
 
     // In a production app, you would blacklist the token in Redis here
     // For now, we just return success (client should delete the token)
@@ -238,6 +280,7 @@ pub async fn change_password(
     req: HttpRequest,
     auth_service: web::Data<AuthService>,
     token_service: web::Data<TokenService>,
+    audit_service: web::Data<AuditService>,
     body: web::Json<ChangePasswordRequest>,
 ) -> Result<HttpResponse, AppError> {
     // Validate request
@@ -255,6 +298,10 @@ pub async fn change_password(
         .change_password(user_id, &body.current_password, &body.new_password)
         .await?;
 
+    // Log password change
+    let audit_context = get_audit_context(&req);
+    let _ = audit_service.log_password_change(user_id, &audit_context).await;
+
     Ok(HttpResponse::Ok().json(MessageResponse {
         status: "success".to_string(),
         message: "Password changed successfully".to_string(),
@@ -266,6 +313,7 @@ pub async fn forgot_password(
     req: HttpRequest,
     auth_service: web::Data<AuthService>,
     reset_service: web::Data<ResetService>,
+    audit_service: web::Data<AuditService>,
     rate_limiters: web::Data<RateLimiters>,
     body: web::Json<ForgotPasswordRequest>,
 ) -> Result<HttpResponse, AppError> {
@@ -276,12 +324,17 @@ pub async fn forgot_password(
     // Validate request
     validate_request(&body.0)?;
 
+    let audit_context = get_audit_context(&req);
+
     // Check if user exists
     let user = auth_service.get_user_by_email(&body.email).await?;
 
     if user.is_some() {
         // Generate reset token
         let token = reset_service.create_reset_token(&body.email).await?;
+
+        // Log password reset request
+        let _ = audit_service.log_password_reset_request(&body.email, &audit_context).await;
 
         // In production, send email with reset link
         // For now, log the token (remove in production!)
@@ -300,6 +353,7 @@ pub async fn reset_password(
     req: HttpRequest,
     auth_service: web::Data<AuthService>,
     reset_service: web::Data<ResetService>,
+    audit_service: web::Data<AuditService>,
     rate_limiters: web::Data<RateLimiters>,
     body: web::Json<ResetPasswordRequest>,
 ) -> Result<HttpResponse, AppError> {
@@ -315,6 +369,12 @@ pub async fn reset_password(
 
     // Reset the password
     auth_service.reset_password(&email, &body.new_password).await?;
+
+    // Get user ID for audit logging
+    if let Ok(Some(user)) = auth_service.get_user_by_email(&email).await {
+        let audit_context = get_audit_context(&req);
+        let _ = audit_service.log_password_reset_complete(user.id, &audit_context).await;
+    }
 
     // Invalidate the token
     reset_service.invalidate_reset_token(&body.token).await?;
