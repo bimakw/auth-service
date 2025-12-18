@@ -5,7 +5,7 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use auth_service::config::Config;
 use auth_service::db;
 use auth_service::handlers::{auth_routes, health_check, oauth_routes, totp_routes};
-use auth_service::services::{AuthService, RateLimiters, ResetService, TokenService, TOTPService};
+use auth_service::services::{AuthService, LockoutService, RateLimiters, ResetService, TokenService, TOTPService};
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
@@ -46,6 +46,9 @@ async fn main() -> std::io::Result<()> {
     let rate_limiters = web::Data::new(
         RateLimiters::new(&config.redis_url).expect("Failed to create rate limiters")
     );
+    let lockout_service = web::Data::new(
+        LockoutService::with_defaults(&config.redis_url).expect("Failed to create lockout service")
+    );
     let config_data = web::Data::new(config.clone());
 
     // Start HTTP server
@@ -65,6 +68,7 @@ async fn main() -> std::io::Result<()> {
             .app_data(reset_service.clone())
             .app_data(totp_service.clone())
             .app_data(rate_limiters.clone())
+            .app_data(lockout_service.clone())
             .app_data(config_data.clone())
             .service(health_check)
             .configure(auth_routes)
