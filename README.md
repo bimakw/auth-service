@@ -237,6 +237,30 @@ make lint
 make build
 ```
 
+## Testing
+
+The project includes comprehensive unit tests for core services:
+
+```bash
+# Run all tests
+cargo test
+
+# Run with output
+cargo test -- --nocapture
+
+# Run specific test module
+cargo test token_service
+cargo test totp_service
+```
+
+### Test Coverage
+
+| Module | Tests | Coverage |
+|--------|-------|----------|
+| Token Service | 14 | Token generation, verification, expiration |
+| TOTP Service | 18 | Secret generation, backup codes, code verification |
+| Password Utils | 2 | Hashing and verification |
+
 ## License
 
 MIT License
