@@ -6,7 +6,10 @@ use crate::models::{
     AuthResponse, ChangePasswordRequest, ForgotPasswordRequest, LoginRequest, RefreshRequest,
     RegisterRequest, ResetPasswordRequest, TokenResponse, TwoFactorRequiredResponse, UserResponse,
 };
-use crate::services::{AuditContext, AuditService, AuthService, LockoutService, RateLimiters, ResetService, TokenService};
+use crate::services::{
+    AuditContext, AuditService, AuthService, LockoutService, RateLimiters, ResetService,
+    TokenService,
+};
 use crate::utils::validate_request;
 
 fn get_client_ip(req: &HttpRequest) -> String {
@@ -87,7 +90,9 @@ pub async fn register(
     let user = auth_service.register(body.into_inner()).await?;
 
     // Log registration
-    let _ = audit_service.log_registration(user.id, &email, &audit_context).await;
+    let _ = audit_service
+        .log_registration(user.id, &email, &audit_context)
+        .await;
 
     // Generate tokens
     let access_token = token_service.generate_access_token(user.id, &user.email, &user.role)?;
@@ -149,12 +154,15 @@ pub async fn login(
             lockout_service.clear_failed_attempts(&body.email).await?;
 
             // Log successful login
-            let _ = audit_service.log_login_success(user.id, &audit_context).await;
+            let _ = audit_service
+                .log_login_success(user.id, &audit_context)
+                .await;
 
             // Check if 2FA is enabled
             if user.totp_enabled {
                 // Generate temporary token for 2FA verification
-                let temp_token = token_service.generate_temp_token(user.id, &user.email, &user.role)?;
+                let temp_token =
+                    token_service.generate_temp_token(user.id, &user.email, &user.role)?;
 
                 return Ok(HttpResponse::Ok().json(TwoFactorRequiredResponse {
                     status: "2fa_required".to_string(),
@@ -165,8 +173,10 @@ pub async fn login(
             }
 
             // Generate tokens (no 2FA)
-            let access_token = token_service.generate_access_token(user.id, &user.email, &user.role)?;
-            let refresh_tok = token_service.generate_refresh_token(user.id, &user.email, &user.role)?;
+            let access_token =
+                token_service.generate_access_token(user.id, &user.email, &user.role)?;
+            let refresh_tok =
+                token_service.generate_refresh_token(user.id, &user.email, &user.role)?;
 
             Ok(HttpResponse::Ok().json(AuthResponse {
                 status: "success".to_string(),
@@ -179,13 +189,17 @@ pub async fn login(
             // Record failed attempt for auth errors
             if matches!(e, AppError::Unauthorized(_)) {
                 // Log failed login
-                let _ = audit_service.log_login_failed(&body.email, &audit_context, "Invalid credentials").await;
+                let _ = audit_service
+                    .log_login_failed(&body.email, &audit_context, "Invalid credentials")
+                    .await;
 
                 let lockout_status = lockout_service.record_failed_attempt(&body.email).await?;
 
                 if lockout_status.is_locked {
                     // Log account lockout
-                    let _ = audit_service.log_account_locked(&body.email, &audit_context).await;
+                    let _ = audit_service
+                        .log_account_locked(&body.email, &audit_context)
+                        .await;
 
                     let locked_until = lockout_status.locked_until.unwrap_or(0);
                     return Err(AppError::AccountLocked {
@@ -300,7 +314,9 @@ pub async fn change_password(
 
     // Log password change
     let audit_context = get_audit_context(&req);
-    let _ = audit_service.log_password_change(user_id, &audit_context).await;
+    let _ = audit_service
+        .log_password_change(user_id, &audit_context)
+        .await;
 
     Ok(HttpResponse::Ok().json(MessageResponse {
         status: "success".to_string(),
@@ -334,7 +350,9 @@ pub async fn forgot_password(
         let token = reset_service.create_reset_token(&body.email).await?;
 
         // Log password reset request
-        let _ = audit_service.log_password_reset_request(&body.email, &audit_context).await;
+        let _ = audit_service
+            .log_password_reset_request(&body.email, &audit_context)
+            .await;
 
         // In production, send email with reset link
         // For now, log the token (remove in production!)
@@ -344,7 +362,8 @@ pub async fn forgot_password(
     // Always return success to prevent email enumeration
     Ok(HttpResponse::Ok().json(MessageResponse {
         status: "success".to_string(),
-        message: "If an account with that email exists, a password reset link has been sent".to_string(),
+        message: "If an account with that email exists, a password reset link has been sent"
+            .to_string(),
     }))
 }
 
@@ -368,12 +387,16 @@ pub async fn reset_password(
     let email = reset_service.validate_reset_token(&body.token).await?;
 
     // Reset the password
-    auth_service.reset_password(&email, &body.new_password).await?;
+    auth_service
+        .reset_password(&email, &body.new_password)
+        .await?;
 
     // Get user ID for audit logging
     if let Ok(Some(user)) = auth_service.get_user_by_email(&email).await {
         let audit_context = get_audit_context(&req);
-        let _ = audit_service.log_password_reset_complete(user.id, &audit_context).await;
+        let _ = audit_service
+            .log_password_reset_complete(user.id, &audit_context)
+            .await;
     }
 
     // Invalidate the token

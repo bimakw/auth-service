@@ -1,5 +1,5 @@
-use actix_web::{dev::ServiceRequest, Error, HttpMessage};
 use actix_web::error::ErrorUnauthorized;
+use actix_web::{dev::ServiceRequest, Error, HttpMessage};
 
 use crate::services::Claims;
 

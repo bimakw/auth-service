@@ -31,8 +31,9 @@ impl TOTPService {
     pub fn generate_qr_code(&self, email: &str, secret: &str) -> Result<String, AppError> {
         let totp = self.create_totp(email, secret)?;
 
-        totp.get_qr_base64()
-            .map_err(|e| AppError::InternalServerError(format!("Failed to generate QR code: {}", e)))
+        totp.get_qr_base64().map_err(|e| {
+            AppError::InternalServerError(format!("Failed to generate QR code: {}", e))
+        })
     }
 
     /// Verify a TOTP code
@@ -50,7 +51,8 @@ impl TOTPService {
             secret_bytes,
             Some(self.config.totp_issuer.clone()),
             "user".to_string(),
-        ).map_err(|e| AppError::InternalServerError(format!("Failed to create TOTP: {}", e)))?;
+        )
+        .map_err(|e| AppError::InternalServerError(format!("Failed to create TOTP: {}", e)))?;
 
         Ok(totp.check_current(code).unwrap_or(false))
     }
@@ -62,7 +64,7 @@ impl TOTPService {
             UPDATE users
             SET totp_secret = $1, totp_enabled = true, updated_at = NOW()
             WHERE id = $2
-            "#
+            "#,
         )
         .bind(secret)
         .bind(user_id)
@@ -83,7 +85,7 @@ impl TOTPService {
             UPDATE users
             SET totp_secret = NULL, totp_enabled = false, updated_at = NOW()
             WHERE id = $1
-            "#
+            "#,
         )
         .bind(user_id)
         .execute(&mut *tx)
@@ -119,7 +121,7 @@ impl TOTPService {
                 r#"
                 INSERT INTO totp_backup_codes (user_id, code_hash)
                 VALUES ($1, $2)
-                "#
+                "#,
             )
             .bind(user_id)
             .bind(&code_hash)
@@ -129,7 +131,11 @@ impl TOTPService {
             codes.push(code);
         }
 
-        tracing::info!("Generated {} backup codes for user: {}", BACKUP_CODE_COUNT, user_id);
+        tracing::info!(
+            "Generated {} backup codes for user: {}",
+            BACKUP_CODE_COUNT,
+            user_id
+        );
         Ok(codes)
     }
 
@@ -142,7 +148,7 @@ impl TOTPService {
             r#"
             SELECT * FROM totp_backup_codes
             WHERE user_id = $1 AND code_hash = $2 AND used = false
-            "#
+            "#,
         )
         .bind(user_id)
         .bind(&code_hash)
@@ -166,7 +172,7 @@ impl TOTPService {
     /// Get remaining unused backup codes count
     pub async fn get_remaining_backup_codes(&self, user_id: Uuid) -> Result<i64, AppError> {
         let count = sqlx::query_scalar::<_, i64>(
-            "SELECT COUNT(*) FROM totp_backup_codes WHERE user_id = $1 AND used = false"
+            "SELECT COUNT(*) FROM totp_backup_codes WHERE user_id = $1 AND used = false",
         )
         .bind(user_id)
         .fetch_one(&self.pool)
@@ -177,25 +183,22 @@ impl TOTPService {
 
     /// Store temporary TOTP secret during setup (before verification)
     pub async fn store_temp_secret(&self, user_id: Uuid, secret: &str) -> Result<(), AppError> {
-        sqlx::query(
-            "UPDATE users SET totp_secret = $1, updated_at = NOW() WHERE id = $2"
-        )
-        .bind(secret)
-        .bind(user_id)
-        .execute(&self.pool)
-        .await?;
+        sqlx::query("UPDATE users SET totp_secret = $1, updated_at = NOW() WHERE id = $2")
+            .bind(secret)
+            .bind(user_id)
+            .execute(&self.pool)
+            .await?;
 
         Ok(())
     }
 
     /// Get user's TOTP secret
     pub async fn get_user_secret(&self, user_id: Uuid) -> Result<Option<String>, AppError> {
-        let secret = sqlx::query_scalar::<_, Option<String>>(
-            "SELECT totp_secret FROM users WHERE id = $1"
-        )
-        .bind(user_id)
-        .fetch_one(&self.pool)
-        .await?;
+        let secret =
+            sqlx::query_scalar::<_, Option<String>>("SELECT totp_secret FROM users WHERE id = $1")
+                .bind(user_id)
+                .fetch_one(&self.pool)
+                .await?;
 
         Ok(secret)
     }
@@ -265,7 +268,8 @@ pub fn verify_totp_code(secret: &str, code: &str, issuer: &str) -> Result<bool, 
         secret_bytes,
         Some(issuer.to_string()),
         "user".to_string(),
-    ).map_err(|e| AppError::InternalServerError(format!("Failed to create TOTP: {}", e)))?;
+    )
+    .map_err(|e| AppError::InternalServerError(format!("Failed to create TOTP: {}", e)))?;
 
     Ok(totp.check_current(code).unwrap_or(false))
 }
@@ -308,7 +312,10 @@ mod tests {
 
         // TOTP secrets should be at least 16 bytes (128 bits) for security
         // Base32 encoding: 16 bytes = 26 characters (with padding)
-        assert!(secret.len() >= 16, "Secret should be at least 16 characters");
+        assert!(
+            secret.len() >= 16,
+            "Secret should be at least 16 characters"
+        );
     }
 
     // ============ Backup Code Generation Tests ============
@@ -325,7 +332,11 @@ mod tests {
         let valid_chars: Vec<char> = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789".chars().collect();
 
         for c in code.chars() {
-            assert!(valid_chars.contains(&c), "Invalid character in backup code: {}", c);
+            assert!(
+                valid_chars.contains(&c),
+                "Invalid character in backup code: {}",
+                c
+            );
         }
     }
 
@@ -335,7 +346,11 @@ mod tests {
 
         // Check for duplicates (statistically very unlikely with proper randomness)
         let unique_codes: std::collections::HashSet<_> = codes.iter().collect();
-        assert_eq!(codes.len(), unique_codes.len(), "Backup codes should be unique");
+        assert_eq!(
+            codes.len(),
+            unique_codes.len(),
+            "Backup codes should be unique"
+        );
     }
 
     // ============ Backup Code Hashing Tests ============
@@ -364,7 +379,10 @@ mod tests {
         let hash1 = hash_backup_code("ABCD1234");
         let hash2 = hash_backup_code("EFGH5678");
 
-        assert_ne!(hash1, hash2, "Different codes should produce different hashes");
+        assert_ne!(
+            hash1, hash2,
+            "Different codes should produce different hashes"
+        );
     }
 
     #[test]
@@ -375,7 +393,10 @@ mod tests {
         assert_eq!(hash.len(), 64, "Hash should be 64 hex characters (SHA256)");
 
         // Should be valid hex
-        assert!(hash.chars().all(|c| c.is_ascii_hexdigit()), "Hash should be hex");
+        assert!(
+            hash.chars().all(|c| c.is_ascii_hexdigit()),
+            "Hash should be hex"
+        );
     }
 
     // ============ TOTP Verification Tests ============
@@ -396,7 +417,10 @@ mod tests {
 
         // Note: There's a 1/1000000 chance this could be the actual code
         // but that's acceptable for testing purposes
-        assert!(!result, "Random code should not verify (with very high probability)");
+        assert!(
+            !result,
+            "Random code should not verify (with very high probability)"
+        );
     }
 
     #[test]
@@ -413,7 +437,8 @@ mod tests {
             secret_bytes,
             Some("TestIssuer".to_string()),
             "user".to_string(),
-        ).unwrap();
+        )
+        .unwrap();
 
         let current_code = totp.generate_current().unwrap();
 
@@ -449,13 +474,25 @@ mod tests {
 
     #[test]
     fn test_backup_code_count_is_reasonable() {
-        assert!(BACKUP_CODE_COUNT >= 5, "Should have at least 5 backup codes");
-        assert!(BACKUP_CODE_COUNT <= 20, "Should have at most 20 backup codes");
+        assert!(
+            BACKUP_CODE_COUNT >= 5,
+            "Should have at least 5 backup codes"
+        );
+        assert!(
+            BACKUP_CODE_COUNT <= 20,
+            "Should have at most 20 backup codes"
+        );
     }
 
     #[test]
     fn test_backup_code_length_is_reasonable() {
-        assert!(BACKUP_CODE_LENGTH >= 6, "Backup codes should be at least 6 chars");
-        assert!(BACKUP_CODE_LENGTH <= 16, "Backup codes should be at most 16 chars");
+        assert!(
+            BACKUP_CODE_LENGTH >= 6,
+            "Backup codes should be at least 6 chars"
+        );
+        assert!(
+            BACKUP_CODE_LENGTH <= 16,
+            "Backup codes should be at most 16 chars"
+        );
     }
 }

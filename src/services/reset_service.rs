@@ -21,7 +21,10 @@ impl ResetService {
 
     /// Generate a password reset token and store it in Redis
     pub async fn create_reset_token(&self, email: &str) -> Result<String, AppError> {
-        let mut conn = self.redis.get_multiplexed_async_connection().await
+        let mut conn = self
+            .redis
+            .get_multiplexed_async_connection()
+            .await
             .map_err(|e| AppError::InternalServerError(format!("Redis error: {}", e)))?;
 
         // Generate random token
@@ -36,7 +39,8 @@ impl ResetService {
 
         // Store in Redis with TTL
         let key = format!("{}{}", RESET_TOKEN_PREFIX, token_hash);
-        conn.set_ex::<_, _, ()>(&key, email, RESET_TOKEN_TTL).await
+        conn.set_ex::<_, _, ()>(&key, email, RESET_TOKEN_TTL)
+            .await
             .map_err(|e| AppError::InternalServerError(format!("Redis error: {}", e)))?;
 
         tracing::info!("Password reset token created for: {}", email);
@@ -45,13 +49,18 @@ impl ResetService {
 
     /// Validate a reset token and return the associated email
     pub async fn validate_reset_token(&self, token: &str) -> Result<String, AppError> {
-        let mut conn = self.redis.get_multiplexed_async_connection().await
+        let mut conn = self
+            .redis
+            .get_multiplexed_async_connection()
+            .await
             .map_err(|e| AppError::InternalServerError(format!("Redis error: {}", e)))?;
 
         let token_hash = self.hash_token(token);
         let key = format!("{}{}", RESET_TOKEN_PREFIX, token_hash);
 
-        let email: Option<String> = conn.get(&key).await
+        let email: Option<String> = conn
+            .get(&key)
+            .await
             .map_err(|e| AppError::InternalServerError(format!("Redis error: {}", e)))?;
 
         email.ok_or_else(|| AppError::BadRequest("Invalid or expired reset token".to_string()))
@@ -59,13 +68,17 @@ impl ResetService {
 
     /// Invalidate a reset token after successful password reset
     pub async fn invalidate_reset_token(&self, token: &str) -> Result<(), AppError> {
-        let mut conn = self.redis.get_multiplexed_async_connection().await
+        let mut conn = self
+            .redis
+            .get_multiplexed_async_connection()
+            .await
             .map_err(|e| AppError::InternalServerError(format!("Redis error: {}", e)))?;
 
         let token_hash = self.hash_token(token);
         let key = format!("{}{}", RESET_TOKEN_PREFIX, token_hash);
 
-        conn.del::<_, ()>(&key).await
+        conn.del::<_, ()>(&key)
+            .await
             .map_err(|e| AppError::InternalServerError(format!("Redis error: {}", e)))?;
 
         Ok(())

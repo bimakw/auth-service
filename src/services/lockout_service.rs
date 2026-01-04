@@ -103,7 +103,9 @@ impl LockoutService {
 
         // Set expiration on first attempt
         if attempts == 1 {
-            let _: () = conn.expire(&attempts_key, self.attempt_window as i64).await?;
+            let _: () = conn
+                .expire(&attempts_key, self.attempt_window as i64)
+                .await?;
         }
 
         // Check if should be locked
@@ -116,7 +118,11 @@ impl LockoutService {
 
             // Set lockout
             let _: () = conn
-                .set_ex(&lockout_key, locked_until.to_string(), self.lockout_duration as u64)
+                .set_ex(
+                    &lockout_key,
+                    locked_until.to_string(),
+                    self.lockout_duration as u64,
+                )
                 .await?;
 
             tracing::warn!(

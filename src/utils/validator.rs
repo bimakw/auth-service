@@ -12,7 +12,11 @@ pub fn validate_request<T: Validate>(data: &T) -> Result<(), AppError> {
                     format!(
                         "{}: {}",
                         field,
-                        error.message.as_ref().map(|m| m.to_string()).unwrap_or_else(|| "Invalid value".to_string())
+                        error
+                            .message
+                            .as_ref()
+                            .map(|m| m.to_string())
+                            .unwrap_or_else(|| "Invalid value".to_string())
                     )
                 })
             })

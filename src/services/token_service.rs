@@ -8,7 +8,7 @@ use crate::errors::AppError;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Claims {
-    pub sub: String,        // User ID
+    pub sub: String, // User ID
     pub email: String,
     pub role: String,
     pub exp: i64,           // Expiration time
@@ -203,7 +203,9 @@ mod tests {
         let email = "test@example.com";
         let role = "user";
 
-        let token = service.generate_refresh_token(user_id, email, role).unwrap();
+        let token = service
+            .generate_refresh_token(user_id, email, role)
+            .unwrap();
         let claims = service.verify_refresh_token(&token).unwrap();
 
         assert_eq!(claims.sub, user_id.to_string());
@@ -216,7 +218,9 @@ mod tests {
         let service = TokenService::new(config);
 
         let user_id = Uuid::new_v4();
-        let token = service.generate_access_token(user_id, "test@example.com", "user").unwrap();
+        let token = service
+            .generate_access_token(user_id, "test@example.com", "user")
+            .unwrap();
 
         // Should fail when verifying access token as refresh
         assert!(service.verify_refresh_token(&token).is_err());
@@ -247,7 +251,9 @@ mod tests {
         let service = TokenService::new(config);
 
         let user_id = Uuid::new_v4();
-        let token = service.generate_temp_token(user_id, "test@example.com", "user").unwrap();
+        let token = service
+            .generate_temp_token(user_id, "test@example.com", "user")
+            .unwrap();
 
         // Temp token should not work as access token
         assert!(service.verify_access_token(&token).is_err());
@@ -259,7 +265,9 @@ mod tests {
         let service = TokenService::new(config);
 
         let user_id = Uuid::new_v4();
-        let token = service.generate_access_token(user_id, "test@example.com", "user").unwrap();
+        let token = service
+            .generate_access_token(user_id, "test@example.com", "user")
+            .unwrap();
 
         // Access token should not work as temp token
         assert!(service.verify_temp_token(&token).is_err());
@@ -305,7 +313,9 @@ mod tests {
         let service2 = TokenService::new(config2);
 
         let user_id = Uuid::new_v4();
-        let token = service1.generate_access_token(user_id, "test@example.com", "user").unwrap();
+        let token = service1
+            .generate_access_token(user_id, "test@example.com", "user")
+            .unwrap();
 
         // Token from service1 should not verify with service2's different secret
         assert!(service2.verify_access_token(&token).is_err());
@@ -319,7 +329,9 @@ mod tests {
         let service = TokenService::new(config);
 
         let original_user_id = Uuid::new_v4();
-        let token = service.generate_access_token(original_user_id, "test@example.com", "user").unwrap();
+        let token = service
+            .generate_access_token(original_user_id, "test@example.com", "user")
+            .unwrap();
         let claims = service.verify_access_token(&token).unwrap();
 
         let extracted_id = service.extract_user_id(&claims).unwrap();
@@ -352,7 +364,9 @@ mod tests {
         let service = TokenService::new(config.clone());
 
         let user_id = Uuid::new_v4();
-        let token = service.generate_access_token(user_id, "test@example.com", "user").unwrap();
+        let token = service
+            .generate_access_token(user_id, "test@example.com", "user")
+            .unwrap();
         let claims = service.verify_access_token(&token).unwrap();
 
         // Check that exp is in the future and roughly matches expected expiration
@@ -367,7 +381,9 @@ mod tests {
         let service = TokenService::new(config);
 
         let user_id = Uuid::new_v4();
-        let token = service.generate_access_token(user_id, "test@example.com", "user").unwrap();
+        let token = service
+            .generate_access_token(user_id, "test@example.com", "user")
+            .unwrap();
         let claims = service.verify_access_token(&token).unwrap();
 
         let now = chrono::Utc::now().timestamp();
@@ -383,8 +399,12 @@ mod tests {
 
         let user_id = Uuid::new_v4();
 
-        let admin_token = service.generate_access_token(user_id, "admin@example.com", "admin").unwrap();
-        let user_token = service.generate_access_token(user_id, "user@example.com", "user").unwrap();
+        let admin_token = service
+            .generate_access_token(user_id, "admin@example.com", "admin")
+            .unwrap();
+        let user_token = service
+            .generate_access_token(user_id, "user@example.com", "user")
+            .unwrap();
 
         let admin_claims = service.verify_access_token(&admin_token).unwrap();
         let user_claims = service.verify_access_token(&user_token).unwrap();
@@ -399,8 +419,12 @@ mod tests {
         let service = TokenService::new(config.clone());
 
         let user_id = Uuid::new_v4();
-        let access_token = service.generate_access_token(user_id, "test@example.com", "user").unwrap();
-        let refresh_token = service.generate_refresh_token(user_id, "test@example.com", "user").unwrap();
+        let access_token = service
+            .generate_access_token(user_id, "test@example.com", "user")
+            .unwrap();
+        let refresh_token = service
+            .generate_refresh_token(user_id, "test@example.com", "user")
+            .unwrap();
 
         let access_claims = service.verify_access_token(&access_token).unwrap();
         let refresh_claims = service.verify_refresh_token(&refresh_token).unwrap();

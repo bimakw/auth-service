@@ -28,7 +28,8 @@ impl Config {
                 .parse()
                 .expect("PORT must be a number"),
             database_url: env::var("DATABASE_URL")?,
-            redis_url: env::var("REDIS_URL").unwrap_or_else(|_| "redis://localhost:6379".to_string()),
+            redis_url: env::var("REDIS_URL")
+                .unwrap_or_else(|_| "redis://localhost:6379".to_string()),
             jwt_secret: env::var("JWT_SECRET")?,
             jwt_access_expiration: env::var("JWT_ACCESS_EXPIRATION")
                 .unwrap_or_else(|_| "900".to_string())
@@ -48,8 +49,7 @@ impl Config {
                 .unwrap_or_else(|_| "http://localhost:8080/api/oauth/github/callback".to_string()),
             frontend_url: env::var("FRONTEND_URL")
                 .unwrap_or_else(|_| "http://localhost:3000".to_string()),
-            totp_issuer: env::var("TOTP_ISSUER")
-                .unwrap_or_else(|_| "AuthService".to_string()),
+            totp_issuer: env::var("TOTP_ISSUER").unwrap_or_else(|_| "AuthService".to_string()),
         })
     }
 

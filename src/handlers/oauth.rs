@@ -1,7 +1,7 @@
 use actix_web::{get, web, HttpRequest, HttpResponse};
 use oauth2::{
-    basic::BasicClient, AuthUrl, AuthorizationCode, ClientId, ClientSecret, CsrfToken,
-    RedirectUrl, Scope, TokenResponse, TokenUrl,
+    basic::BasicClient, AuthUrl, AuthorizationCode, ClientId, ClientSecret, CsrfToken, RedirectUrl,
+    Scope, TokenResponse, TokenUrl,
 };
 use serde::Deserialize;
 
@@ -11,7 +11,10 @@ use crate::services::{AuditContext, AuditService, AuthService, TokenService};
 
 fn get_audit_context(req: &HttpRequest) -> AuditContext {
     AuditContext {
-        ip_address: req.connection_info().realip_remote_addr().map(|s| s.to_string()),
+        ip_address: req
+            .connection_info()
+            .realip_remote_addr()
+            .map(|s| s.to_string()),
         user_agent: req
             .headers()
             .get("User-Agent")
@@ -152,7 +155,9 @@ pub async fn google_callback(
 
     // Log OAuth login
     let audit_context = get_audit_context(&req);
-    let _ = audit_service.log_oauth_login(user.id, "google", &audit_context).await;
+    let _ = audit_service
+        .log_oauth_login(user.id, "google", &audit_context)
+        .await;
 
     // Generate tokens
     let jwt_access_token = token_service.generate_access_token(user.id, &user.email, &user.role)?;
@@ -267,7 +272,9 @@ pub async fn github_callback(
 
     // Log OAuth login
     let audit_context = get_audit_context(&req);
-    let _ = audit_service.log_oauth_login(user.id, "github", &audit_context).await;
+    let _ = audit_service
+        .log_oauth_login(user.id, "github", &audit_context)
+        .await;
 
     // Generate tokens
     let jwt_access_token = token_service.generate_access_token(user.id, &user.email, &user.role)?;

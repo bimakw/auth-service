@@ -176,8 +176,13 @@ impl AuditService {
         let details = serde_json::json!({
             "email": email
         });
-        self.log_success(Some(user_id), AuditEventType::Register, context, Some(details))
-            .await
+        self.log_success(
+            Some(user_id),
+            AuditEventType::Register,
+            context,
+            Some(details),
+        )
+        .await
     }
 
     /// Log OAuth login
@@ -215,8 +220,13 @@ impl AuditService {
         let details = serde_json::json!({
             "email": email
         });
-        self.log_success(None, AuditEventType::PasswordResetRequest, context, Some(details))
-            .await
+        self.log_success(
+            None,
+            AuditEventType::PasswordResetRequest,
+            context,
+            Some(details),
+        )
+        .await
     }
 
     /// Log password reset complete
@@ -225,8 +235,13 @@ impl AuditService {
         user_id: Uuid,
         context: &AuditContext,
     ) -> Result<(), AppError> {
-        self.log_success(Some(user_id), AuditEventType::PasswordResetComplete, context, None)
-            .await
+        self.log_success(
+            Some(user_id),
+            AuditEventType::PasswordResetComplete,
+            context,
+            None,
+        )
+        .await
     }
 
     /// Log TOTP enable
@@ -256,16 +271,18 @@ impl AuditService {
         success: bool,
         context: &AuditContext,
     ) -> Result<(), AppError> {
-        self.log_event(Some(user_id), AuditEventType::TotpVerify, context, None, success)
-            .await
+        self.log_event(
+            Some(user_id),
+            AuditEventType::TotpVerify,
+            context,
+            None,
+            success,
+        )
+        .await
     }
 
     /// Log logout
-    pub async fn log_logout(
-        &self,
-        user_id: Uuid,
-        context: &AuditContext,
-    ) -> Result<(), AppError> {
+    pub async fn log_logout(&self, user_id: Uuid, context: &AuditContext) -> Result<(), AppError> {
         self.log_success(Some(user_id), AuditEventType::Logout, context, None)
             .await
     }

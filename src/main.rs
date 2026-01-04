@@ -5,7 +5,10 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use auth_service::config::Config;
 use auth_service::db;
 use auth_service::handlers::{auth_routes, health_check, oauth_routes, totp_routes};
-use auth_service::services::{AuditService, AuthService, LockoutService, RateLimiters, ResetService, TokenService, TOTPService};
+use auth_service::services::{
+    AuditService, AuthService, LockoutService, RateLimiters, ResetService, TOTPService,
+    TokenService,
+};
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
@@ -41,14 +44,14 @@ async fn main() -> std::io::Result<()> {
     let audit_service = web::Data::new(AuditService::new(pool.clone()));
     let token_service = web::Data::new(TokenService::new(config.clone()));
     let reset_service = web::Data::new(
-        ResetService::new(&config.redis_url).expect("Failed to create reset service")
+        ResetService::new(&config.redis_url).expect("Failed to create reset service"),
     );
     let totp_service = web::Data::new(TOTPService::new(pool.clone(), config.clone()));
     let rate_limiters = web::Data::new(
-        RateLimiters::new(&config.redis_url).expect("Failed to create rate limiters")
+        RateLimiters::new(&config.redis_url).expect("Failed to create rate limiters"),
     );
     let lockout_service = web::Data::new(
-        LockoutService::with_defaults(&config.redis_url).expect("Failed to create lockout service")
+        LockoutService::with_defaults(&config.redis_url).expect("Failed to create lockout service"),
     );
     let config_data = web::Data::new(config.clone());
 

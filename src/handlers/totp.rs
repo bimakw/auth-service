@@ -2,8 +2,8 @@ use actix_web::{get, post, web, HttpRequest, HttpResponse};
 
 use crate::errors::AppError;
 use crate::models::{
-    BackupCodesResponse, MessageResponse, TOTPDisableRequest, TOTPLoginVerifyRequest,
-    TOTPSetupResponse, TOTPVerifyRequest, AuthResponse, UserResponse,
+    AuthResponse, BackupCodesResponse, MessageResponse, TOTPDisableRequest, TOTPLoginVerifyRequest,
+    TOTPSetupResponse, TOTPVerifyRequest, UserResponse,
 };
 use crate::services::{AuthService, TOTPService, TokenService};
 use crate::utils::{password::verify_password, validate_request};
@@ -39,7 +39,8 @@ pub async fn setup_totp(
         status: "success".to_string(),
         secret,
         qr_code: format!("data:image/png;base64,{}", qr_code),
-        message: "Scan the QR code with your authenticator app, then verify with a code".to_string(),
+        message: "Scan the QR code with your authenticator app, then verify with a code"
+            .to_string(),
     }))
 }
 
@@ -72,7 +73,9 @@ pub async fn verify_setup(
 
     // Verify the code
     if !totp_service.verify_code(&secret, &body.code)? {
-        return Err(AppError::Unauthorized("Invalid verification code".to_string()));
+        return Err(AppError::Unauthorized(
+            "Invalid verification code".to_string(),
+        ));
     }
 
     // Enable TOTP
@@ -105,7 +108,9 @@ pub async fn verify_totp_login(
     let user = auth_service.get_user_by_id(user_id).await?;
 
     if !user.totp_enabled {
-        return Err(AppError::BadRequest("2FA is not enabled for this account".to_string()));
+        return Err(AppError::BadRequest(
+            "2FA is not enabled for this account".to_string(),
+        ));
     }
 
     let secret = user
@@ -122,7 +127,9 @@ pub async fn verify_totp_login(
     };
 
     if !is_valid {
-        return Err(AppError::Unauthorized("Invalid verification code".to_string()));
+        return Err(AppError::Unauthorized(
+            "Invalid verification code".to_string(),
+        ));
     }
 
     // Generate full tokens
@@ -185,10 +192,9 @@ pub async fn disable_totp(
     }
 
     // Verify password
-    let password_hash = user
-        .password_hash
-        .as_ref()
-        .ok_or_else(|| AppError::BadRequest("Cannot disable 2FA for OAuth-only account".to_string()))?;
+    let password_hash = user.password_hash.as_ref().ok_or_else(|| {
+        AppError::BadRequest("Cannot disable 2FA for OAuth-only account".to_string())
+    })?;
 
     if !verify_password(&body.password, password_hash)? {
         return Err(AppError::Unauthorized("Invalid password".to_string()));
@@ -201,7 +207,9 @@ pub async fn disable_totp(
         .ok_or_else(|| AppError::InternalServerError("TOTP secret not found".to_string()))?;
 
     if !totp_service.verify_code(secret, &body.code)? {
-        return Err(AppError::Unauthorized("Invalid verification code".to_string()));
+        return Err(AppError::Unauthorized(
+            "Invalid verification code".to_string(),
+        ));
     }
 
     // Disable TOTP
@@ -241,7 +249,9 @@ pub async fn regenerate_backup_codes(
         .ok_or_else(|| AppError::InternalServerError("TOTP secret not found".to_string()))?;
 
     if !totp_service.verify_code(secret, &body.code)? {
-        return Err(AppError::Unauthorized("Invalid verification code".to_string()));
+        return Err(AppError::Unauthorized(
+            "Invalid verification code".to_string(),
+        ));
     }
 
     // Generate new backup codes
