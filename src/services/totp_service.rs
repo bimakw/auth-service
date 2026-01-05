@@ -474,13 +474,25 @@ mod tests {
 
     #[test]
     fn test_backup_code_count_is_reasonable() {
-        const _: () = assert!(BACKUP_CODE_COUNT >= 5, "Should have at least 5 backup codes");
-        const _: () = assert!(BACKUP_CODE_COUNT <= 20, "Should have at most 20 backup codes");
+        const _: () = assert!(
+            BACKUP_CODE_COUNT >= 5,
+            "Should have at least 5 backup codes"
+        );
+        const _: () = assert!(
+            BACKUP_CODE_COUNT <= 20,
+            "Should have at most 20 backup codes"
+        );
     }
 
     #[test]
     fn test_backup_code_length_is_reasonable() {
-        const _: () = assert!(BACKUP_CODE_LENGTH >= 6, "Backup codes should be at least 6 chars");
-        const _: () = assert!(BACKUP_CODE_LENGTH <= 16, "Backup codes should be at most 16 chars");
+        const _: () = assert!(
+            BACKUP_CODE_LENGTH >= 6,
+            "Backup codes should be at least 6 chars"
+        );
+        const _: () = assert!(
+            BACKUP_CODE_LENGTH <= 16,
+            "Backup codes should be at most 16 chars"
+        );
     }
 }
