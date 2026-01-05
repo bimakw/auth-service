@@ -14,11 +14,5 @@ pub fn extract_token_from_header(req: &ServiceRequest) -> Option<String> {
     req.headers()
         .get("Authorization")
         .and_then(|h| h.to_str().ok())
-        .and_then(|h| {
-            if h.starts_with("Bearer ") {
-                Some(h[7..].to_string())
-            } else {
-                None
-            }
-        })
+        .and_then(|h| h.strip_prefix("Bearer ").map(|s| s.to_string()))
 }

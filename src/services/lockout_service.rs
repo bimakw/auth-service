@@ -121,7 +121,7 @@ impl LockoutService {
                 .set_ex(
                     &lockout_key,
                     locked_until.to_string(),
-                    self.lockout_duration as u64,
+                    self.lockout_duration,
                 )
                 .await?;
 
