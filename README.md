@@ -1,26 +1,62 @@
 # Auth Service
 
-Authentication service with JWT, Google OAuth2, TOTP (2FA), and Argon2 password hashing. Built with Rust + Actix-web + PostgreSQL + Redis.
+[![CI](https://img.shields.io/github/actions/workflow/status/bimakw/auth-service/ci.yml?branch=main)](https://github.com/bimakw/auth-service/actions)
+
+Authentication microservice with JWT, Google OAuth2, TOTP two-factor auth, role-based access control, and audit logging. Built with Rust (Actix-web), PostgreSQL, and Redis.
+
+## Features
+
+- **JWT Auth** — access + refresh token rotation with configurable expiry
+- **Google OAuth2** — sign-in via Google with automatic account linking
+- **TOTP 2FA** — setup, verify, backup codes, disable
+- **Password Security** — Argon2id hashing, forgot/reset flow, change password
+- **RBAC** — role-based access control middleware
+- **Audit Logging** — tracks auth events (login, logout, password change, 2FA)
+- **Rate Limiting** — Redis-backed per-IP rate limiter on auth endpoints
+
+## Stack
+
+| Component | Tech |
+|-----------|------|
+| Language | Rust 1.75+ |
+| Framework | Actix-web 4 |
+| Database | PostgreSQL 15 |
+| Cache | Redis 7 |
+| Auth | JWT (RS256), Argon2id, TOTP |
+| Testing | cargo test + testcontainers |
 
 ## Running
 
 ```bash
 cp .env.example .env
-make docker-up
-make dev
+make docker-up       # postgres + redis
+make dev             # or: cargo run
 ```
 
 ## Endpoints
 
-**Auth**: register, login, refresh, logout, me, change-password, forgot/reset-password
+| Group | Routes |
+|-------|--------|
+| **Auth** | register, login, refresh, logout, me, change-password, forgot/reset-password |
+| **OAuth** | `GET /api/oauth/google` → Google sign-in |
+| **2FA** | setup, verify-setup, verify, status, disable, backup-codes |
+| **Health** | `GET /health` |
 
-**OAuth**: Google sign-in via `/api/oauth/google`
+See `.env.example` for all configuration options.
 
-**2FA (TOTP)**: setup, verify-setup, verify, status, disable, backup-codes
+## Project Structure
 
-**Health**: `GET /health`
-
-See `.env.example` for config (JWT secret, token expiration, Google OAuth, Redis, etc).
+```
+src/
+  auth/          JWT generation, validation, middleware
+  handlers/      HTTP request handlers
+  models/        domain models + DTOs
+  repository/    database queries (sqlx)
+  services/      business logic
+  middleware/     RBAC, rate limiting, audit
+migrations/      SQL migrations
+tests/           integration tests
+```
 
 ## Testing
 
